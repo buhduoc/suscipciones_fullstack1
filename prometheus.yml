@@ -5,4 +5,5 @@ scrape_configs:
   - job_name: 'spring-backend'
     metrics_path: '/actuator/prometheus'
     static_configs:
-      - targets: ['app-spring:8080']
+      - targets:
+          - 'suscripciones-balanceador-1981272304.us-east-1.elb.amazonaws.com:80'
