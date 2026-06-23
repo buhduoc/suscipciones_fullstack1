@@ -1,72 +1,53 @@
-name: "CD: Build, Push to ECR & Deploy to ECS"
+name: CI/CD Pipeline - ECS Deploy Multicontenedor
 
 on:
   push:
-    branches: [ "main" ]
-  workflow_dispatch: 
+    branches: [ "main" ]  # Se activará automáticamente cuando hagas push a la rama main
 
 jobs:
-  build-and-deploy:
-    name: "Build Docker Image & Deploy to AWS Academy"
+  build-push-deploy:
     runs-on: ubuntu-latest
-    
+
     steps:
-      - name: "Checkout Code"
+      # 1. Descargar el código del repositorio en el runner de GitHub
+      - name: Checkout código
         uses: actions/checkout@v4
 
-      - name: "Set up JDK 21"
-        uses: actions/setup-java@v4
-        with:
-          java-version: '21'
-          distribution: 'temurin'
-          cache: 'maven'
-
-      - name: "Configurar credenciales AWS Academy"
+      # 2. Configurar las credenciales para conectarse a AWS
+      - name: Configurar credenciales AWS
         uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }} 
-          aws-region: us-east-1 #
+          aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }} # Se ignora automáticamente si está vacío
+          aws-region: us-east-1
 
-      - name: "Login en Amazon ECR"
-        id: login-ecr
-        uses: aws-actions/amazon-ecr-login@v1
+      # 3. Autenticar Docker con tu Amazon ECR
+      - name: Login en Amazon ECR
+        uses: aws-actions/amazon-ecr-login@v2
 
-      - name: "Set up Docker Buildx"
-        uses: docker/setup-buildx-action@v3
-        with:
-          driver: docker-container
-
-      - name: "Build and Push Image to ECR"
-        uses: docker/build-push-action@v5
-        with:
-          context: .
-          push: true
-          tags: |
-            ${{ secrets.ECR_REPO_URL_FRONTEND }}:latest
-            ${{ secrets.ECR_REPO_URL_FRONTEND }}:${{ github.sha }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
-      - name: "Descargar Task Definition actual desde AWS"
+      # 4. Construir la imagen de tu Backend (Java Spring Boot) y subirla a ECR
+      - name: Build imagen y push a ECR
         run: |
-          aws ecs describe-task-definition \
-            --task-definition ${{ secrets.ECS_TASK_DEFINITION_NAME }} \
-            --query taskDefinition > task-definition.json
+          docker build -t suscripciones-backend .
+          docker tag suscripciones-backend:latest 864092060431.dkr.ecr.us-east-1.amazonaws.com/buh-repositorio-ecc:latest
+          docker push 864092060431.dkr.ecr.us-east-1.amazonaws.com/buh-repositorio-ecc:latest
 
-      - name: "Actualizar Tag de la imagen en la Task Def"
+      # 5. Inyectar la nueva imagen de ECR dentro de tu archivo 'task-definition.json'
+      - name: Actualizar Tag de la imagen en la Task Def
         id: render-task-def
         uses: aws-actions/amazon-ecs-render-task-definition@v1
         with:
           task-definition: task-definition.json
-          container-name: suscripciones-container 
-          image: ${{ secrets.ECR_REPO_URL_FRONTEND }}:latest
+          container-name: suscripciones-container # Debe coincidir con el name en tu JSON
+          image: 864092060431.dkr.ecr.us-east-1.amazonaws.com/buh-repositorio-ecc:latest
 
-      - name: "Desplegar nueva Task Definition en el Servicio ECS"
+      # 6. Desplegar la actualización en tu clúster de ECS
+      # ¡IMPORTANTE!: Reemplaza 'TU_CLUSTER_NAME' y 'TU_SERVICE_NAME' con los nombres reales de tu consola
+      - name: Desplegar nueva Task Definition en el Servicio
         uses: aws-actions/amazon-ecs-deploy-task-definition@v2
         with:
           task-definition: ${{ steps.render-task-def.outputs.task-definition }}
-          service: ${{ secrets.ECS_SERVICE_NAME }}
-          cluster: ${{ secrets.ECS_CLUSTER_NAME }}
-          wait-for-service-stability: false
+          service: suscripciones-buh-service # El nombre que le diste al crear el servicio en ECS
+          cluster: cluster-buh-ecc          # El nombre de tu clúster de la captura anterior
+          wait-for-service-stability: true
