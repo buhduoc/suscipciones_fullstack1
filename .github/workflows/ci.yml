@@ -1,50 +1,58 @@
-name: CI/CD Tienda Perritos - Backend Suscripciones
+name: Deploy ECS
 
 on:
   push:
-    branches: [ "main" ]
+    branches:
+      - main
 
 jobs:
-  build-push-deploy-backend:
+
+  deploy:
+
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout código
-        uses: actions/checkout@v3
 
-      - name: Configurar credenciales AWS
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: AWS Credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
           aws-region: ${{ secrets.AWS_REGION }}
 
-      - name: Login en Amazon ECR (runner)
-        uses: aws-actions/amazon-ecr-login@v1
+      - name: Login ECR
+        uses: aws-actions/amazon-ecr-login@v2
 
-      - name: Build imagen Backend y push a ECR
+      - name: Build Docker
         run: |
-          # Compila y construye la imagen Docker de tu servicio de suscripciones
-          docker build -t suscripciones-backend .
-          docker tag suscripciones-backend:latest ${{ secrets.ECR_REPO_URL_BACKEND }}:latest
-          docker push ${{ secrets.ECR_REPO_URL_BACKEND }}:latest
+          docker build -t suscripciones-app .
 
-      - name: Descargar Task Definition actual
+      - name: Push Docker
+        run: |
+          docker tag suscripciones-app:latest \
+          ${{ secrets.ECR_REPO_URL }}:latest
+
+          docker push \
+          ${{ secrets.ECR_REPO_URL }}:latest
+
+      - name: Descargar Task Definition
         run: |
           aws ecs describe-task-definition \
-            --task-definition ${{ secrets.ECS_TASK_DEFINITION_NAME }} \
-            --query taskDefinition > task-definition.json
+          --task-definition ${{ secrets.ECS_TASK_DEFINITION_NAME }} \
+          --query taskDefinition > task-definition.json
 
-      - name: Actualizar Tag de la imagen en la Task Def
+      - name: Actualizar Imagen
         id: render-task-def
         uses: aws-actions/amazon-ecs-render-task-definition@v1
         with:
           task-definition: task-definition.json
-          container-name: suscripciones-container # El nombre del contenedor dentro de tu JSON de monitoreo
-          image: ${{ secrets.ECR_REPO_URL_BACKEND }}:latest
+          container-name: app-spring
+          image: ${{ secrets.ECR_REPO_URL }}:latest
 
-      - name: Desplegar nueva Task Definition en el Servicio
+      - name: Deploy ECS
         uses: aws-actions/amazon-ecs-deploy-task-definition@v2
         with:
           task-definition: ${{ steps.render-task-def.outputs.task-definition }}
