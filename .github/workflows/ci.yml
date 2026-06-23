@@ -19,14 +19,14 @@ jobs:
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }} # Se ignora automáticamente si está vacío
+          aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
           aws-region: us-east-1
 
       # 3. Autenticar Docker con tu Amazon ECR
       - name: Login en Amazon ECR
         uses: aws-actions/amazon-ecr-login@v2
 
-      # 4. Construir la imagen de tu Backend (Java Spring Boot) y subirla a ECR
+      # 4. Construir la imagen local de tu Backend y luego etiquetarla correctamente para AWS
       - name: Build imagen y push a ECR
         run: |
           docker build -t suscripciones-backend .
@@ -39,15 +39,14 @@ jobs:
         uses: aws-actions/amazon-ecs-render-task-definition@v1
         with:
           task-definition: task-definition.json
-          container-name: suscripciones-container # Debe coincidir con el name en tu JSON
+          container-name: suscripciones-container # Coincide con el name del contenedor de tu app en el JSON
           image: 864092060431.dkr.ecr.us-east-1.amazonaws.com/buh-repositorio-ecc:latest
 
-      # 6. Desplegar la actualización en tu clúster de ECS
-      # ¡IMPORTANTE!: Reemplaza 'TU_CLUSTER_NAME' y 'TU_SERVICE_NAME' con los nombres reales de tu consola
+      # 6. Desplegar la actualización en tu clúster real de ECS
       - name: Desplegar nueva Task Definition en el Servicio
         uses: aws-actions/amazon-ecs-deploy-task-definition@v2
         with:
           task-definition: ${{ steps.render-task-def.outputs.task-definition }}
-          service: suscripciones-buh-service # El nombre que le diste al crear el servicio en ECS
-          cluster: cluster-buh-ecc          # El nombre de tu clúster de la captura anterior
+          service: suscripciones-buh-service
+          cluster: cluster-buh-ecc
           wait-for-service-stability: true
