@@ -1,52 +1,54 @@
-name: CI/CD Pipeline - ECS Deploy Multicontenedor
+name: CI/CD Tienda Perritos - Backend
 
 on:
   push:
-    branches: [ "main" ]  # Se activará automáticamente cuando hagas push a la rama main
+    branches: [ "main" ]
 
 jobs:
-  build-push-deploy:
+  build-push-deploy-backend:
     runs-on: ubuntu-latest
 
     steps:
-      # 1. Descargar el código del repositorio en el runner de GitHub
       - name: Checkout código
-        uses: actions/checkout@v4
+        uses: actions/checkout@v3
 
-      # 2. Configurar las credenciales para conectarse a AWS
       - name: Configurar credenciales AWS
         uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
-          aws-region: us-east-1
+          aws-region: ${{ secrets.AWS_REGION }}
 
-      # 3. Autenticar Docker con tu Amazon ECR
-      - name: Login en Amazon ECR
-        uses: aws-actions/amazon-ecr-login@v2
+      - name: Login en Amazon ECR (runner)
+        uses: aws-actions/amazon-ecr-login@v1
 
-      # 4. Construir la imagen local de tu Backend y luego etiquetarla correctamente para AWS
-      - name: Build imagen y push a ECR
+      - name: Build imagen Backend y push a ECR
         run: |
-          docker build -t suscripciones-backend .
-          docker tag suscripciones-backend:latest 864092060431.dkr.ecr.us-east-1.amazonaws.com/buh-repositorio-ecc:latest
-          docker push 864092060431.dkr.ecr.us-east-1.amazonaws.com/buh-repositorio-ecc:latest
+          # Si tu backend está en la raíz, puedes dejar "." o eliminar el cd
+          cd . 
+          docker build -t rent-car-backend .
+          docker tag rent-car-backend:latest ${{ secrets.ECR_REPO_URL_BACKEND }}:latest
+          docker push ${{ secrets.ECR_REPO_URL_BACKEND }}:latest
 
-      # 5. Inyectar la nueva imagen de ECR dentro de tu archivo 'task-definition.json'
+      - name: Descargar Task Definition actual
+        run: |
+          aws ecs describe-task-definition \
+            --task-definition ${{ secrets.ECS_TASK_DEFINITION_NAME }} \
+            --query taskDefinition > task-definition.json
+
       - name: Actualizar Tag de la imagen en la Task Def
         id: render-task-def
         uses: aws-actions/amazon-ecs-render-task-definition@v1
         with:
           task-definition: task-definition.json
-          container-name: suscripciones-container # Coincide con el name del contenedor de tu app en el JSON
-          image: 864092060431.dkr.ecr.us-east-1.amazonaws.com/buh-repositorio-ecc:latest
+          container-name: suscripciones-container # Debe ser el "name" de tu contenedor backend en el JSON
+          image: ${{ secrets.ECR_REPO_URL_BACKEND }}:latest
 
-      # 6. Desplegar la actualización en tu clúster real de ECS
       - name: Desplegar nueva Task Definition en el Servicio
         uses: aws-actions/amazon-ecs-deploy-task-definition@v2
         with:
           task-definition: ${{ steps.render-task-def.outputs.task-definition }}
-          service: suscripciones-buh-service
-          cluster: cluster-buh-ecc
+          service: ${{ secrets.ECS_SERVICE_NAME }}
+          cluster: ${{ secrets.ECS_CLUSTER_NAME }}
           wait-for-service-stability: true
