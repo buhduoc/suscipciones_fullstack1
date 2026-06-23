@@ -1,4 +1,4 @@
-name: CI/CD Tienda Perritos - Backend
+name: CI/CD Tienda Perritos - Backend Suscripciones
 
 on:
   push:
@@ -25,10 +25,9 @@ jobs:
 
       - name: Build imagen Backend y push a ECR
         run: |
-          # Si tu backend está en la raíz, puedes dejar "." o eliminar el cd
-          cd . 
-          docker build -t rent-car-backend .
-          docker tag rent-car-backend:latest ${{ secrets.ECR_REPO_URL_BACKEND }}:latest
+          # Compila y construye la imagen Docker de tu servicio de suscripciones
+          docker build -t suscripciones-backend .
+          docker tag suscripciones-backend:latest ${{ secrets.ECR_REPO_URL_BACKEND }}:latest
           docker push ${{ secrets.ECR_REPO_URL_BACKEND }}:latest
 
       - name: Descargar Task Definition actual
@@ -42,7 +41,7 @@ jobs:
         uses: aws-actions/amazon-ecs-render-task-definition@v1
         with:
           task-definition: task-definition.json
-          container-name: suscripciones-container # Debe ser el "name" de tu contenedor backend en el JSON
+          container-name: suscripciones-container # El nombre del contenedor dentro de tu JSON de monitoreo
           image: ${{ secrets.ECR_REPO_URL_BACKEND }}:latest
 
       - name: Desplegar nueva Task Definition en el Servicio
