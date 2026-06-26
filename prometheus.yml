@@ -6,4 +6,4 @@ scrape_configs:
     metrics_path: '/actuator/prometheus'
     static_configs:
       - targets:
-          - 'suscripciones-balanceador-1981272304.us-east-1.elb.amazonaws.com:80'
+          - 'wuh-alb-1772784568.us-east-1.elb.amazonaws.com:80'
