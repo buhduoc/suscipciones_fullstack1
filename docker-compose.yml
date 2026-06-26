@@ -1,51 +1,8 @@
-version: "3.8"
-
 networks:
-  loki-net:
-    driver: bridge
   monitoring-net:
     driver: bridge
 
 services:
-  db:
-    image: postgres:16-alpine
-    container_name: suscipciones-db
-    environment:
-      POSTGRES_DB: suscipciones_db
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: tu_password_secreto
-    ports:
-      - "5432:5432"
-    networks:
-      - monitoring-net
-
-  app-spring:
-    build:
-      context: ./
-      dockerfile: Dockerfile
-    container_name: mi-spring-app
-    working_dir: /app
-    command: java -jar /app/app.jar
-    environment:
-      - SPRING_DATASOURCE_URL=jdbc:postgresql://db:5432/suscipciones_db
-      - SPRING_DATASOURCE_USERNAME=postgres
-      - SPRING_DATASOURCE_PASSWORD=tu_password_secreto
-      - SPRING_JPA_HIBERNATE_DDL_AUTO=update
-    volumes:
-      - ./logs:/app/logs
-    ports:
-      - "8080:8080"
-    networks:
-      - monitoring-net
-      - loki-net
-    depends_on:
-      - db
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8080/actuator/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-
   prometheus:
     image: prom/prometheus:v2.51.0
     container_name: suscipciones-prometheus
@@ -53,8 +10,6 @@ services:
       - ./prometheus.yml:/etc/prometheus/prometheus.yml
     ports:
       - "9090:9090"
-    depends_on:
-      - app-spring
     networks:
       - monitoring-net
 
@@ -63,8 +18,11 @@ services:
     container_name: suscipciones-loki
     ports:
       - "3100:3100"
+    command: -config.file=/etc/loki/local-config.yaml
+    volumes:
+      - ./loki-config.yml:/etc/loki/local-config.yaml
     networks:
-      - loki-net
+      - monitoring-net
 
   promtail:
     image: grafana/promtail:2.9.0
@@ -74,7 +32,7 @@ services:
       - ./promtail-config.yml:/etc/promtail/config.yml
     command: -config.file=/etc/promtail/config.yml
     networks:
-      - loki-net
+      - monitoring-net
     depends_on:
       - loki
 
@@ -84,13 +42,10 @@ services:
     ports:
       - "3000:3000"
     environment:
+      - GF_SECURITY_ADMIN_USER=admin
       - GF_SECURITY_ADMIN_PASSWORD=admin
     networks:
-      - loki-net
       - monitoring-net
     depends_on:
-      - loki
       - prometheus
-
-volumes:
-  postgres_data: {}
+      - loki
